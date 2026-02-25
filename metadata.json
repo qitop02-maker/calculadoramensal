@@ -1,0 +1,5 @@
+{
+  "name": "Gestor de Contas",
+  "description": "Aplicativo simples para gestão de contas mensais, parcelas e controle por instituições financeiras.",
+  "requestFramePermissions": []
+}

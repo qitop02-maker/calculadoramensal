@@ -1,0 +1,26 @@
+export type Category = 'Moradia' | 'Internet' | 'Impostos' | 'Seguro' | 'Cartão' | 'Lazer' | 'Alimentação' | 'Transporte' | 'Saúde' | 'Outros';
+
+export type Group = 'Geral' | 'Wil' | 'Nu B' | 'M.P' | 'Sicred' | string;
+
+export type Status = 'pendente' | 'pago';
+
+export interface Bill {
+  id: string;
+  mes_ref: string; // YYYY-MM
+  nome: string;
+  valor: number;
+  categoria: Category;
+  grupo: Group;
+  vencimento?: number; // Day of month
+  parcelado: boolean;
+  parcela_atual?: number;
+  parcela_total?: number;
+  status: Status;
+  observacoes?: string;
+}
+
+export interface MonthlyStats {
+  total: number;
+  pago: number;
+  pendente: number;
+}
