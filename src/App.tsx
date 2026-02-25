@@ -11,11 +11,15 @@ import {
   LayoutDashboard, 
   Filter,
   Download,
-  X
+  X,
+  Cloud,
+  CloudOff,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bill, Category, Group, Status, MonthlyStats } from './types';
 import { SEED_DATA, CATEGORIES, GROUPS, MONTHS } from './constants';
+import { supabase } from './lib/supabase';
 
 const LOCAL_STORAGE_KEY = 'gestor_contas_data';
 
@@ -26,24 +30,92 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
-  // Initialize data
+  // Load initial data from LocalStorage then sync with Supabase
   useEffect(() => {
     const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (savedData) {
       setBills(JSON.parse(savedData));
     } else {
       setBills(SEED_DATA);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(SEED_DATA));
     }
+    fetchBillsFromSupabase();
   }, []);
 
-  // Save data whenever bills change
+  // Save to LocalStorage whenever bills change
   useEffect(() => {
     if (bills.length > 0) {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(bills));
     }
   }, [bills]);
+
+  const fetchBillsFromSupabase = async () => {
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const { data, error } = await supabase
+        .from('bills')
+        .select('*');
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setBills(data);
+        setLastSync(new Date());
+      } else if (!localStorage.getItem(LOCAL_STORAGE_KEY)) {
+        // If Supabase is empty and no local storage, seed Supabase
+        await seedSupabase();
+      }
+    } catch (err: any) {
+      console.error('Error fetching from Supabase:', err);
+      setSyncError('Erro ao sincronizar com a nuvem');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const seedSupabase = async () => {
+    try {
+      const { error } = await supabase
+        .from('bills')
+        .insert(SEED_DATA);
+      if (error) throw error;
+      setBills(SEED_DATA);
+      setLastSync(new Date());
+    } catch (err) {
+      console.error('Error seeding Supabase:', err);
+    }
+  };
+
+  const syncBillToSupabase = async (bill: Bill) => {
+    try {
+      const { error } = await supabase
+        .from('bills')
+        .upsert(bill);
+      if (error) throw error;
+      setLastSync(new Date());
+    } catch (err) {
+      console.error('Error syncing bill:', err);
+      setSyncError('Erro ao salvar na nuvem');
+    }
+  };
+
+  const deleteBillFromSupabase = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('bills')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      setLastSync(new Date());
+    } catch (err) {
+      console.error('Error deleting bill:', err);
+      setSyncError('Erro ao excluir na nuvem');
+    }
+  };
 
   const filteredBills = useMemo(() => {
     return bills.filter(bill => {
@@ -78,21 +150,27 @@ export default function App() {
     }).format(value);
   };
 
-  const toggleStatus = (id: string) => {
-    setBills(prev => prev.map(bill => 
-      bill.id === id 
-        ? { ...bill, status: bill.status === 'pago' ? 'pendente' : 'pago' } 
-        : bill
-    ));
+  const toggleStatus = async (id: string) => {
+    const billToUpdate = bills.find(b => b.id === id);
+    if (!billToUpdate) return;
+
+    const updatedBill = { 
+      ...billToUpdate, 
+      status: billToUpdate.status === 'pago' ? 'pendente' : 'pago' as Status 
+    };
+
+    setBills(prev => prev.map(bill => bill.id === id ? updatedBill : bill));
+    await syncBillToSupabase(updatedBill);
   };
 
-  const deleteBill = (id: string) => {
+  const deleteBill = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir esta conta?')) {
       setBills(prev => prev.filter(bill => bill.id !== id));
+      await deleteBillFromSupabase(id);
     }
   };
 
-  const handleSaveBill = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveBill = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
@@ -117,6 +195,7 @@ export default function App() {
       setBills(prev => [...prev, newBill]);
     }
 
+    await syncBillToSupabase(newBill);
     setIsModalOpen(false);
     setEditingBill(null);
   };
@@ -151,7 +230,19 @@ export default function App() {
             <LayoutDashboard className="w-6 h-6 text-emerald-600" />
             <h1 className="text-xl font-semibold tracking-tight">Gestor de Contas</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              {isSyncing ? (
+                <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
+              ) : syncError ? (
+                <CloudOff className="w-4 h-4 text-red-500" title={syncError} />
+              ) : (
+                <Cloud className="w-4 h-4 text-emerald-600 opacity-40" />
+              )}
+              <span className="text-[10px] font-medium text-black/40 hidden sm:inline">
+                {isSyncing ? 'Sincronizando...' : lastSync ? `Sinc: ${lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Offline'}
+              </span>
+            </div>
             <button 
               onClick={exportCSV}
               className="p-2 hover:bg-black/5 rounded-full transition-colors"
