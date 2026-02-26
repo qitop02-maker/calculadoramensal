@@ -170,32 +170,88 @@ export default function App() {
     }
   };
 
+  const getNextMonth = (monthStr: string) => {
+    const [year, month] = monthStr.split('-').map(Number);
+    let nextMonth = month + 1;
+    let nextYear = year;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear++;
+    }
+    return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+  };
+
   const handleSaveBill = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
-    const newBill: Bill = {
-      id: editingBill?.id || crypto.randomUUID(),
-      mes_ref: selectedMonth,
+    const isParcelado = formData.get('parcelado') === 'on';
+    const parcelaAtual = formData.get('parcela_atual') ? parseInt(formData.get('parcela_atual') as string) : 1;
+    const parcelaTotal = formData.get('parcela_total') ? parseInt(formData.get('parcela_total') as string) : 1;
+    
+    const baseBill: Partial<Bill> = {
       nome: formData.get('nome') as string,
       valor: parseFloat(formData.get('valor') as string),
       categoria: formData.get('categoria') as Category,
       grupo: formData.get('grupo') as string,
       vencimento: formData.get('vencimento') ? parseInt(formData.get('vencimento') as string) : undefined,
-      parcelado: formData.get('parcelado') === 'on',
-      parcela_atual: formData.get('parcela_atual') ? parseInt(formData.get('parcela_atual') as string) : undefined,
-      parcela_total: formData.get('parcela_total') ? parseInt(formData.get('parcela_total') as string) : undefined,
+      parcelado: isParcelado,
       status: (formData.get('status') as Status) || 'pendente',
       observacoes: formData.get('observacoes') as string,
     };
 
     if (editingBill) {
-      setBills(prev => prev.map(b => b.id === editingBill.id ? newBill : b));
+      const updatedBill: Bill = {
+        ...editingBill,
+        ...baseBill,
+        mes_ref: editingBill.mes_ref, // Keep original month on edit
+        parcela_atual: isParcelado ? parcelaAtual : undefined,
+        parcela_total: isParcelado ? parcelaTotal : undefined,
+      } as Bill;
+
+      setBills(prev => prev.map(b => b.id === editingBill.id ? updatedBill : b));
+      await syncBillToSupabase(updatedBill);
     } else {
-      setBills(prev => [...prev, newBill]);
+      // Logic for adding new bill(s)
+      const billsToAdd: Bill[] = [];
+      
+      if (isParcelado && parcelaTotal > 1) {
+        let currentMonth = selectedMonth;
+        const groupId = crypto.randomUUID(); // Optional: link installments together if needed in future
+
+        for (let p = parcelaAtual; p <= parcelaTotal; p++) {
+          billsToAdd.push({
+            ...baseBill,
+            id: crypto.randomUUID(),
+            mes_ref: currentMonth,
+            parcela_atual: p,
+            parcela_total: parcelaTotal,
+          } as Bill);
+          currentMonth = getNextMonth(currentMonth);
+        }
+      } else {
+        billsToAdd.push({
+          ...baseBill,
+          id: crypto.randomUUID(),
+          mes_ref: selectedMonth,
+          parcela_atual: isParcelado ? parcelaAtual : undefined,
+          parcela_total: isParcelado ? parcelaTotal : undefined,
+        } as Bill);
+      }
+
+      setBills(prev => [...prev, ...billsToAdd]);
+      
+      // Bulk sync to Supabase
+      try {
+        const { error } = await supabase.from('bills').insert(billsToAdd);
+        if (error) throw error;
+        setLastSync(new Date());
+      } catch (err) {
+        console.error('Error bulk syncing bills:', err);
+        setSyncError('Erro ao salvar parcelas na nuvem');
+      }
     }
 
-    await syncBillToSupabase(newBill);
     setIsModalOpen(false);
     setEditingBill(null);
   };
