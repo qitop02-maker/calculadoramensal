@@ -215,9 +215,17 @@ export default function App() {
     const parcelaAtual = formData.get('parcela_atual') ? parseInt(formData.get('parcela_atual') as string) : 1;
     const parcelaTotal = formData.get('parcela_total') ? parseInt(formData.get('parcela_total') as string) : 1;
     
+    const valorStr = (formData.get('valor') as string).replace(',', '.');
+    const valor = parseFloat(valorStr);
+
+    if (isNaN(valor)) {
+      alert('Por favor, insira um valor válido.');
+      return;
+    }
+    
     const baseBill: Partial<Bill> = {
       nome: formData.get('nome') as string,
-      valor: parseFloat(formData.get('valor') as string),
+      valor: valor,
       grupo: formData.get('grupo') as string,
       parcelado: isParcelado,
       fixa: isFixa,
@@ -225,16 +233,28 @@ export default function App() {
       observacoes: formData.get('observacoes') as string,
     };
 
+    // Helper for UUID generation with fallback
+    const generateId = () => {
+      try {
+        return crypto.randomUUID();
+      } catch (e) {
+        return Math.random().toString(36).substring(2) + Date.now().toString(36);
+      }
+    };
+
+    // Store a reference to the bill being edited before clearing state
+    const currentEditingBill = editingBill;
+
     setIsModalOpen(false);
     setEditingBill(null);
 
-    if (editingBill) {
+    if (currentEditingBill) {
       // 1. Update the current bill and all future siblings in the series
       const updatedBills = bills.map(b => {
         // Match siblings: same name and group (using old name/group to find them)
-        const isFutureSibling = b.nome === editingBill.nome && 
-                               b.grupo === editingBill.grupo && 
-                               b.mes_ref >= editingBill.mes_ref;
+        const isFutureSibling = b.nome === currentEditingBill.nome && 
+                               b.grupo === currentEditingBill.grupo && 
+                               b.mes_ref >= currentEditingBill.mes_ref;
         
         if (isFutureSibling) {
           return {
@@ -253,7 +273,7 @@ export default function App() {
       // 2. If it was changed to Fixed, ensure future months have it if they don't already
       const finalBillsToAdd: Bill[] = [];
       if (isFixa) {
-        const startIndex = MONTHS.findIndex(m => m.value === editingBill.mes_ref);
+        const startIndex = MONTHS.findIndex(m => m.value === currentEditingBill.mes_ref);
         const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex + 1) : [];
         
         monthsToApply.forEach(m => {
@@ -266,7 +286,7 @@ export default function App() {
           if (!alreadyExists) {
             finalBillsToAdd.push({
               ...baseBill,
-              id: crypto.randomUUID(),
+              id: generateId(),
               mes_ref: m.value,
               status: 'pendente',
             } as Bill);
@@ -281,7 +301,7 @@ export default function App() {
       const billsToUpsert = finalBillsState.filter(b => 
         b.nome === baseBill.nome && 
         b.grupo === baseBill.grupo && 
-        b.mes_ref >= editingBill.mes_ref
+        b.mes_ref >= currentEditingBill.mes_ref
       );
 
       setIsSyncing(true);
@@ -304,7 +324,6 @@ export default function App() {
         const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex) : [{ value: selectedMonth }];
         
         monthsToApply.forEach(m => {
-          // Avoid duplicates in the same month
           const alreadyExists = bills.some(b => 
             b.nome === baseBill.nome && 
             b.grupo === baseBill.grupo && 
@@ -314,7 +333,7 @@ export default function App() {
           if (!alreadyExists) {
             billsToAdd.push({
               ...baseBill,
-              id: crypto.randomUUID(),
+              id: generateId(),
               mes_ref: m.value,
               parcela_atual: isParcelado ? parcelaAtual : undefined,
               parcela_total: isParcelado ? parcelaTotal : undefined,
@@ -333,7 +352,7 @@ export default function App() {
           if (!alreadyExists) {
             billsToAdd.push({
               ...baseBill,
-              id: crypto.randomUUID(),
+              id: generateId(),
               mes_ref: currentMonth,
               parcela_atual: p,
               parcela_total: parcelaTotal,
@@ -344,7 +363,7 @@ export default function App() {
       } else {
         billsToAdd.push({
           ...baseBill,
-          id: crypto.randomUUID(),
+          id: generateId(),
           mes_ref: selectedMonth,
           parcela_atual: isParcelado ? parcelaAtual : undefined,
           parcela_total: isParcelado ? parcelaTotal : undefined,
