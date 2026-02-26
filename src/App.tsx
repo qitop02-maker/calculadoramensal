@@ -67,6 +67,29 @@ export default function App() {
     }
   }, [bills]);
 
+  // Cleanup: Fix invalid IDs from previous versions to ensure Supabase compatibility
+  useEffect(() => {
+    // General UUID regex (v1-v5)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const hasInvalidIds = bills.some(b => !uuidRegex.test(b.id));
+    
+    if (hasInvalidIds) {
+      const fixedBills = bills.map(b => {
+        if (!uuidRegex.test(b.id)) {
+          return {
+            ...b,
+            id: 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+              var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+              return v.toString(16);
+            })
+          };
+        }
+        return b;
+      });
+      setBills(fixedBills);
+    }
+  }, [bills]);
+
   useEffect(() => {
     localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
   }, [groups]);
@@ -247,9 +270,19 @@ export default function App() {
     const parcelaAtual = formData.get('parcela_atual') ? parseInt(formData.get('parcela_atual') as string) : 1;
     const parcelaTotal = formData.get('parcela_total') ? parseInt(formData.get('parcela_total') as string) : 1;
     
-    // Helper for unique ID generation (robust for mobile)
+    // Helper for unique ID generation (must be valid UUID for Supabase)
     const generateId = () => {
-      return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+      try {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID();
+        }
+      } catch (e) {}
+      
+      // Fallback to manual UUID v4 generation for older mobile browsers
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
     };
 
     const valorStr = (formData.get('valor') as string).replace(',', '.');
