@@ -306,15 +306,25 @@ export default function App() {
             >
               <Download className="w-5 h-5 opacity-60" />
             </button>
-            <select 
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-black/5 border-none rounded-lg px-3 py-1.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-            >
-              {MONTHS.map(m => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
+          </div>
+        </div>
+        
+        {/* Horizontal Month Navigation */}
+        <div className="max-w-2xl mx-auto mt-4">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
+            {MONTHS.map(m => (
+              <button
+                key={m.value}
+                onClick={() => setSelectedMonth(m.value)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                  selectedMonth === m.value 
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' 
+                    : 'bg-black/5 text-black/60 hover:bg-black/10'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
         </div>
       </header>
@@ -436,19 +446,19 @@ export default function App() {
                               <span className={`font-mono text-sm ${bill.status === 'pago' ? 'text-black/40' : 'text-black'}`}>
                                 {formatCurrency(bill.valor)}
                               </span>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                 <button 
                                   onClick={() => {
                                     setEditingBill(bill);
                                     setIsModalOpen(true);
                                   }}
-                                  className="p-1.5 hover:bg-black/5 rounded-full text-black/40 hover:text-black transition-colors"
+                                  className="p-2 hover:bg-black/5 rounded-full text-black/40 hover:text-black transition-colors"
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button 
                                   onClick={() => deleteBill(bill.id)}
-                                  className="p-1.5 hover:bg-red-50 rounded-full text-black/40 hover:text-red-500 transition-colors"
+                                  className="p-2 hover:bg-red-50 rounded-full text-black/40 hover:text-red-500 transition-colors"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
