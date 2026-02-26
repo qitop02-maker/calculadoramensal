@@ -199,7 +199,7 @@ export const SEED_DATA: Bill[] = [
 ];
 
 export const GROUPS: string[] = [
-  'Geral', 'Wil', 'Nu B', 'M.P', 'Sicred'
+  'Geral', 'Wil', 'Nu B', 'M.P', 'Sicred', 'Mercado'
 ];
 
 export const MONTHS = [

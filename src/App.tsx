@@ -140,7 +140,7 @@ export default function App() {
   }, [bills, selectedMonth, filter]);
 
   const stats = useMemo((): MonthlyStats => {
-    const monthBills = bills.filter(b => b.mes_ref === selectedMonth);
+    const monthBills = bills.filter(b => b.mes_ref === selectedMonth && b.grupo !== 'Mercado');
     return {
       total: monthBills.reduce((acc, b) => acc + b.valor, 0),
       pago: monthBills.filter(b => b.status === 'pago').reduce((acc, b) => acc + b.valor, 0),
@@ -547,8 +547,18 @@ export default function App() {
                   <div className="flex items-center gap-3">
                     <div className="w-1 h-6 bg-emerald-500 rounded-full" />
                     <div className="text-left">
-                      <h3 className="font-semibold text-lg">{group}</h3>
-                      <p className="text-xs text-black/40 font-medium uppercase tracking-wider">Total: {formatCurrency(groupTotal)}</p>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-lg">{group}</h3>
+                        {group === 'Mercado' && (
+                          <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-medium uppercase tracking-wider">
+                            Extra
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-black/40 font-medium uppercase tracking-wider">
+                        Total: {formatCurrency(groupTotal)}
+                        {group === 'Mercado' && <span className="ml-1 text-[10px] normal-case font-normal">(não somado ao total)</span>}
+                      </p>
                     </div>
                   </div>
                   {isCollapsed ? <ChevronDown className="w-5 h-5 opacity-40" /> : <ChevronUp className="w-5 h-5 opacity-40" />}
