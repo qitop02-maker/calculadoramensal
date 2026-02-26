@@ -84,13 +84,45 @@ export default function App() {
       if (data && data.length > 0) {
         setBills(data);
         setLastSync(new Date());
-      } else if (!localStorage.getItem(LOCAL_STORAGE_KEY)) {
-        // If Supabase is empty and no local storage, seed Supabase
-        await seedSupabase();
+      } else {
+        // Supabase is empty. Try to push local data if it exists.
+        const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (savedData) {
+          const localBills = JSON.parse(savedData);
+          if (localBills.length > 0) {
+            const { error: insertError } = await supabase.from('bills').insert(localBills);
+            if (insertError) {
+              console.error('Error migrating local data to Supabase:', insertError);
+              // If migration fails, just keep local data for now
+            } else {
+              setLastSync(new Date());
+            }
+          }
+        } else {
+          await seedSupabase();
+        }
       }
     } catch (err: any) {
       console.error('Error fetching from Supabase:', err);
-      setSyncError('Erro ao sincronizar com a nuvem');
+      setSyncError('Erro de conexão com a nuvem');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const forceSyncAll = async () => {
+    if (bills.length === 0) return;
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const { error } = await supabase.from('bills').upsert(bills);
+      if (error) throw error;
+      setLastSync(new Date());
+      alert('Sincronização completa com sucesso!');
+    } catch (err: any) {
+      console.error('Manual sync error:', err);
+      setSyncError('Erro ao sincronizar tudo');
+      alert('Erro ao sincronizar: ' + (err.message || 'Verifique sua conexão'));
     } finally {
       setIsSyncing(false);
     }
@@ -469,6 +501,13 @@ export default function App() {
                 {isSyncing ? 'Sincronizando...' : lastSync ? `Sinc: ${lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Offline'}
               </span>
             </div>
+            <button 
+              onClick={forceSyncAll}
+              className={`p-2 hover:bg-black/5 rounded-full transition-colors ${syncError ? 'text-red-500' : ''}`}
+              title="Sincronizar Tudo Agora"
+            >
+              <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : 'opacity-60'}`} />
+            </button>
             <button 
               onClick={() => setIsGroupsModalOpen(true)}
               className="p-2 hover:bg-black/5 rounded-full transition-colors"
