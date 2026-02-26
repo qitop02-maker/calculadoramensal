@@ -215,11 +215,16 @@ export default function App() {
     const parcelaAtual = formData.get('parcela_atual') ? parseInt(formData.get('parcela_atual') as string) : 1;
     const parcelaTotal = formData.get('parcela_total') ? parseInt(formData.get('parcela_total') as string) : 1;
     
+    // Helper for unique ID generation (robust for mobile)
+    const generateId = () => {
+      return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+    };
+
     const valorStr = (formData.get('valor') as string).replace(',', '.');
     const valor = parseFloat(valorStr);
 
     if (isNaN(valor)) {
-      alert('Por favor, insira um valor válido.');
+      alert('Por favor, insira um valor válido para o valor.');
       return;
     }
     
@@ -233,156 +238,140 @@ export default function App() {
       observacoes: formData.get('observacoes') as string,
     };
 
-    // Helper for UUID generation with fallback
-    const generateId = () => {
-      try {
-        return crypto.randomUUID();
-      } catch (e) {
-        return Math.random().toString(36).substring(2) + Date.now().toString(36);
-      }
-    };
-
     // Store a reference to the bill being edited before clearing state
     const currentEditingBill = editingBill;
 
+    // Start sync indicator immediately
+    setIsSyncing(true);
+    setSyncError(null);
+
+    // Optimistic update: close modal and update local state immediately
     setIsModalOpen(false);
     setEditingBill(null);
 
-    if (currentEditingBill) {
-      // 1. Update the current bill and all future siblings in the series
-      const updatedBills = bills.map(b => {
-        // Match siblings: same name and group (using old name/group to find them)
-        const isFutureSibling = b.nome === currentEditingBill.nome && 
-                               b.grupo === currentEditingBill.grupo && 
-                               b.mes_ref >= currentEditingBill.mes_ref;
-        
-        if (isFutureSibling) {
-          return {
-            ...b,
-            nome: baseBill.nome!,
-            valor: baseBill.valor!,
-            grupo: baseBill.grupo!,
-            fixa: baseBill.fixa!,
-            observacoes: baseBill.observacoes,
-            // Preserve status and parcela_atual
-          };
-        }
-        return b;
-      });
-
-      // 2. If it was changed to Fixed, ensure future months have it if they don't already
-      const finalBillsToAdd: Bill[] = [];
-      if (isFixa) {
-        const startIndex = MONTHS.findIndex(m => m.value === currentEditingBill.mes_ref);
-        const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex + 1) : [];
-        
-        monthsToApply.forEach(m => {
-          const alreadyExists = updatedBills.some(b => 
-            b.nome === baseBill.nome && 
-            b.grupo === baseBill.grupo && 
-            b.mes_ref === m.value
-          );
+    try {
+      if (currentEditingBill) {
+        // 1. Update the current bill and all future siblings in the series
+        const updatedBills = bills.map(b => {
+          const isFutureSibling = b.nome === currentEditingBill.nome && 
+                                 b.grupo === currentEditingBill.grupo && 
+                                 b.mes_ref >= currentEditingBill.mes_ref;
           
-          if (!alreadyExists) {
-            finalBillsToAdd.push({
-              ...baseBill,
-              id: generateId(),
-              mes_ref: m.value,
-              status: 'pendente',
-            } as Bill);
+          if (isFutureSibling) {
+            return {
+              ...b,
+              nome: baseBill.nome!,
+              valor: baseBill.valor!,
+              grupo: baseBill.grupo!,
+              fixa: baseBill.fixa!,
+              observacoes: baseBill.observacoes,
+            };
           }
+          return b;
         });
-      }
 
-      const finalBillsState = [...updatedBills, ...finalBillsToAdd];
-      setBills(finalBillsState);
-      
-      // 3. Sync to Supabase
-      const billsToUpsert = finalBillsState.filter(b => 
-        b.nome === baseBill.nome && 
-        b.grupo === baseBill.grupo && 
-        b.mes_ref >= currentEditingBill.mes_ref
-      );
+        const finalBillsToAdd: Bill[] = [];
+        if (isFixa) {
+          const startIndex = MONTHS.findIndex(m => m.value === currentEditingBill.mes_ref);
+          const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex + 1) : [];
+          
+          monthsToApply.forEach(m => {
+            const alreadyExists = updatedBills.some(b => 
+              b.nome === baseBill.nome && 
+              b.grupo === baseBill.grupo && 
+              b.mes_ref === m.value
+            );
+            
+            if (!alreadyExists) {
+              finalBillsToAdd.push({
+                ...baseBill,
+                id: generateId(),
+                mes_ref: m.value,
+                status: 'pendente',
+              } as Bill);
+            }
+          });
+        }
 
-      setIsSyncing(true);
-      try {
+        const finalBillsState = [...updatedBills, ...finalBillsToAdd];
+        setBills(finalBillsState);
+        
+        const billsToUpsert = finalBillsState.filter(b => 
+          b.nome === baseBill.nome && 
+          b.grupo === baseBill.grupo && 
+          b.mes_ref >= currentEditingBill.mes_ref
+        );
+
         const { error } = await supabase.from('bills').upsert(billsToUpsert);
         if (error) throw error;
         setLastSync(new Date());
-      } catch (err) {
-        console.error('Error cascading update:', err);
-        setSyncError('Erro ao atualizar série de contas');
-      } finally {
-        setIsSyncing(false);
-      }
-    } else {
-      // Logic for adding new bill(s)
-      const billsToAdd: Bill[] = [];
-      
-      if (isFixa) {
-        const startIndex = MONTHS.findIndex(m => m.value === selectedMonth);
-        const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex) : [{ value: selectedMonth }];
-        
-        monthsToApply.forEach(m => {
-          const alreadyExists = bills.some(b => 
-            b.nome === baseBill.nome && 
-            b.grupo === baseBill.grupo && 
-            b.mes_ref === m.value
-          );
-
-          if (!alreadyExists) {
-            billsToAdd.push({
-              ...baseBill,
-              id: generateId(),
-              mes_ref: m.value,
-              parcela_atual: isParcelado ? parcelaAtual : undefined,
-              parcela_total: isParcelado ? parcelaTotal : undefined,
-            } as Bill);
-          }
-        });
-      } else if (isParcelado && parcelaTotal > 1) {
-        let currentMonth = selectedMonth;
-        for (let p = parcelaAtual; p <= parcelaTotal; p++) {
-          const alreadyExists = bills.some(b => 
-            b.nome === baseBill.nome && 
-            b.grupo === baseBill.grupo && 
-            b.mes_ref === currentMonth
-          );
-
-          if (!alreadyExists) {
-            billsToAdd.push({
-              ...baseBill,
-              id: generateId(),
-              mes_ref: currentMonth,
-              parcela_atual: p,
-              parcela_total: parcelaTotal,
-            } as Bill);
-          }
-          currentMonth = getNextMonth(currentMonth);
-        }
       } else {
-        billsToAdd.push({
-          ...baseBill,
-          id: generateId(),
-          mes_ref: selectedMonth,
-          parcela_atual: isParcelado ? parcelaAtual : undefined,
-          parcela_total: isParcelado ? parcelaTotal : undefined,
-        } as Bill);
-      }
+        // Adding new bill(s)
+        const billsToAdd: Bill[] = [];
+        
+        if (isFixa) {
+          const startIndex = MONTHS.findIndex(m => m.value === selectedMonth);
+          const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex) : [{ value: selectedMonth }];
+          
+          monthsToApply.forEach(m => {
+            const alreadyExists = bills.some(b => 
+              b.nome === baseBill.nome && 
+              b.grupo === baseBill.grupo && 
+              b.mes_ref === m.value
+            );
 
-      setBills(prev => [...prev, ...billsToAdd]);
-      
-      setIsSyncing(true);
-      try {
-        const { error } = await supabase.from('bills').insert(billsToAdd);
-        if (error) throw error;
-        setLastSync(new Date());
-      } catch (err) {
-        console.error('Error bulk syncing bills:', err);
-        setSyncError('Erro ao salvar série na nuvem');
-      } finally {
-        setIsSyncing(false);
+            if (!alreadyExists) {
+              billsToAdd.push({
+                ...baseBill,
+                id: generateId(),
+                mes_ref: m.value,
+                parcela_atual: isParcelado ? parcelaAtual : undefined,
+                parcela_total: isParcelado ? parcelaTotal : undefined,
+              } as Bill);
+            }
+          });
+        } else if (isParcelado && parcelaTotal > 1) {
+          let currentMonth = selectedMonth;
+          for (let p = parcelaAtual; p <= parcelaTotal; p++) {
+            const alreadyExists = bills.some(b => 
+              b.nome === baseBill.nome && 
+              b.grupo === baseBill.grupo && 
+              b.mes_ref === currentMonth
+            );
+
+            if (!alreadyExists) {
+              billsToAdd.push({
+                ...baseBill,
+                id: generateId(),
+                mes_ref: currentMonth,
+                parcela_atual: p,
+                parcela_total: parcelaTotal,
+              } as Bill);
+            }
+            currentMonth = getNextMonth(currentMonth);
+          }
+        } else {
+          billsToAdd.push({
+            ...baseBill,
+            id: generateId(),
+            mes_ref: selectedMonth,
+            parcela_atual: isParcelado ? parcelaAtual : undefined,
+            parcela_total: isParcelado ? parcelaTotal : undefined,
+          } as Bill);
+        }
+
+        if (billsToAdd.length > 0) {
+          setBills(prev => [...prev, ...billsToAdd]);
+          const { error } = await supabase.from('bills').insert(billsToAdd);
+          if (error) throw error;
+          setLastSync(new Date());
+        }
       }
+    } catch (err: any) {
+      console.error('Sync error:', err);
+      setSyncError('Erro ao sincronizar: ' + (err.message || 'Verifique sua conexão'));
+    } finally {
+      setIsSyncing(false);
     }
   };
 
