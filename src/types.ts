@@ -14,6 +14,8 @@ export interface Bill {
   status: Status;
   fixa: boolean;
   observacoes?: string;
+  categoria?: string;
+  vencimento?: number;
 }
 
 export interface MonthlyStats {

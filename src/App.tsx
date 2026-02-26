@@ -113,7 +113,12 @@ export default function App() {
         if (savedData) {
           const localBills = JSON.parse(savedData);
           if (localBills.length > 0) {
-            const { error: insertError } = await supabase.from('bills').insert(localBills);
+            const billsToMigrate = localBills.map((b: any) => ({
+              ...b,
+              categoria: b.categoria || 'Geral',
+              vencimento: b.vencimento || 1
+            }));
+            const { error: insertError } = await supabase.from('bills').insert(billsToMigrate);
             if (insertError) {
               console.error('Error migrating local data to Supabase:', insertError);
               // If migration fails, just keep local data for now
@@ -138,7 +143,13 @@ export default function App() {
     setIsSyncing(true);
     setSyncError(null);
     try {
-      const { error } = await supabase.from('bills').upsert(bills);
+      // Add default values for required DB columns
+      const billsToSync = bills.map(b => ({
+        ...b,
+        categoria: b.categoria || 'Geral',
+        vencimento: b.vencimento || 1
+      }));
+      const { error } = await supabase.from('bills').upsert(billsToSync);
       if (error) throw error;
       setLastSync(new Date());
       alert('Sincronização completa com sucesso!');
@@ -153,9 +164,14 @@ export default function App() {
 
   const seedSupabase = async () => {
     try {
+      const billsToSeed = SEED_DATA.map(b => ({
+        ...b,
+        categoria: 'Geral',
+        vencimento: 1
+      }));
       const { error } = await supabase
         .from('bills')
-        .insert(SEED_DATA);
+        .insert(billsToSeed);
       if (error) throw error;
       setBills(SEED_DATA);
       setLastSync(new Date());
@@ -167,9 +183,15 @@ export default function App() {
   const syncBillToSupabase = async (bill: Bill) => {
     setIsSyncing(true);
     try {
+      // Add default values for required DB columns that were removed from UI
+      const billToSync = {
+        ...bill,
+        categoria: bill.categoria || 'Geral',
+        vencimento: bill.vencimento || 1
+      };
       const { error } = await supabase
         .from('bills')
-        .upsert(bill);
+        .upsert(billToSync);
       if (error) throw error;
       setLastSync(new Date());
     } catch (err) {
@@ -361,11 +383,17 @@ export default function App() {
         const finalBillsState = [...updatedBills, ...finalBillsToAdd];
         setBills(finalBillsState);
         
-        const billsToUpsert = finalBillsState.filter(b => 
-          b.nome === baseBill.nome && 
-          b.grupo === baseBill.grupo && 
-          b.mes_ref >= currentEditingBill.mes_ref
-        );
+        const billsToUpsert = finalBillsState
+          .filter(b => 
+            b.nome === baseBill.nome && 
+            b.grupo === baseBill.grupo && 
+            b.mes_ref >= currentEditingBill.mes_ref
+          )
+          .map(b => ({
+            ...b,
+            categoria: b.categoria || 'Geral',
+            vencimento: b.vencimento || 1
+          }));
 
         const { error } = await supabase.from('bills').upsert(billsToUpsert);
         if (error) throw error;
@@ -427,7 +455,12 @@ export default function App() {
 
         if (billsToAdd.length > 0) {
           setBills(prev => [...prev, ...billsToAdd]);
-          const { error } = await supabase.from('bills').insert(billsToAdd);
+          const billsToInsert = billsToAdd.map(b => ({
+            ...b,
+            categoria: b.categoria || 'Geral',
+            vencimento: b.vencimento || 1
+          }));
+          const { error } = await supabase.from('bills').insert(billsToInsert);
           if (error) throw error;
           setLastSync(new Date());
         }
@@ -482,7 +515,12 @@ export default function App() {
       const affectedBills = updatedBills.filter(b => b.grupo === newName);
       if (affectedBills.length > 0) {
         setIsSyncing(true);
-        supabase.from('bills').upsert(affectedBills).then(({ error }) => {
+        const billsToSync = affectedBills.map(b => ({
+          ...b,
+          categoria: b.categoria || 'Geral',
+          vencimento: b.vencimento || 1
+        }));
+        supabase.from('bills').upsert(billsToSync).then(({ error }) => {
           if (error) console.error('Error syncing renamed group bills:', error);
           else setLastSync(new Date());
           setIsSyncing(false);
