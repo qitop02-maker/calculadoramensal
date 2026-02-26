@@ -12,7 +12,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 5,
     parcela_total: 12,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   {
     id: '2',
@@ -22,7 +23,8 @@ export const SEED_DATA: Bill[] = [
     categoria: 'Lazer',
     grupo: 'Geral',
     parcelado: false,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: true
   },
   {
     id: '3',
@@ -32,7 +34,8 @@ export const SEED_DATA: Bill[] = [
     categoria: 'Internet',
     grupo: 'Geral',
     parcelado: false,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: true
   },
   {
     id: '4',
@@ -42,7 +45,8 @@ export const SEED_DATA: Bill[] = [
     categoria: 'Moradia',
     grupo: 'Geral',
     parcelado: false,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: true
   },
   {
     id: '5',
@@ -52,7 +56,8 @@ export const SEED_DATA: Bill[] = [
     categoria: 'Moradia',
     grupo: 'Geral',
     parcelado: false,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: true
   },
   {
     id: '6',
@@ -62,7 +67,8 @@ export const SEED_DATA: Bill[] = [
     categoria: 'Seguro',
     grupo: 'Geral',
     parcelado: false,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: true
   },
   {
     id: '7',
@@ -74,7 +80,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 1,
     parcela_total: 6,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   {
     id: '8',
@@ -84,7 +91,8 @@ export const SEED_DATA: Bill[] = [
     categoria: 'Impostos',
     grupo: 'Geral',
     parcelado: false,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   // Grupo: Wil
   {
@@ -97,7 +105,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 5,
     parcela_total: 6,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   {
     id: '10',
@@ -109,7 +118,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 2,
     parcela_total: 3,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   {
     id: '11',
@@ -121,7 +131,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 2,
     parcela_total: 4,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   // Grupo: Nu B
   {
@@ -134,7 +145,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 9,
     parcela_total: 12,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   {
     id: '13',
@@ -146,7 +158,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 3,
     parcela_total: 5,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   {
     id: '14',
@@ -158,7 +171,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 4,
     parcela_total: 10,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   {
     id: '15',
@@ -170,7 +184,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 2,
     parcela_total: 2,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   // Grupo: M.P
   {
@@ -183,7 +198,8 @@ export const SEED_DATA: Bill[] = [
     parcelado: true,
     parcela_atual: 9,
     parcela_total: 24,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   },
   // Grupo: Sicred
   {
@@ -194,7 +210,8 @@ export const SEED_DATA: Bill[] = [
     categoria: 'Outros',
     grupo: 'Sicred',
     parcelado: false,
-    status: 'pendente'
+    status: 'pendente',
+    fixa: false
   }
 ];
 

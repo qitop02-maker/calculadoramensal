@@ -186,6 +186,7 @@ export default function App() {
     const formData = new FormData(e.currentTarget);
     
     const isParcelado = formData.get('parcelado') === 'on';
+    const isFixa = formData.get('fixa') === 'on';
     const parcelaAtual = formData.get('parcela_atual') ? parseInt(formData.get('parcela_atual') as string) : 1;
     const parcelaTotal = formData.get('parcela_total') ? parseInt(formData.get('parcela_total') as string) : 1;
     
@@ -196,6 +197,7 @@ export default function App() {
       grupo: formData.get('grupo') as string,
       vencimento: formData.get('vencimento') ? parseInt(formData.get('vencimento') as string) : undefined,
       parcelado: isParcelado,
+      fixa: isFixa,
       status: (formData.get('status') as Status) || 'pendente',
       observacoes: formData.get('observacoes') as string,
     };
@@ -257,13 +259,14 @@ export default function App() {
   };
 
   const exportCSV = () => {
-    const headers = ['Nome', 'Valor', 'Grupo', 'Categoria', 'Parcela', 'Status'];
+    const headers = ['Nome', 'Valor', 'Grupo', 'Categoria', 'Parcela', 'Fixa', 'Status'];
     const rows = filteredBills.map(b => [
       b.nome,
       b.valor.toFixed(2),
       b.grupo,
       b.categoria,
       b.parcelado ? `${b.parcela_atual}/${b.parcela_total}` : '-',
+      b.fixa ? 'Sim' : 'Não',
       b.status
     ]);
     
@@ -433,6 +436,11 @@ export default function App() {
                                   <span className={`font-medium ${bill.status === 'pago' ? 'text-black/40 line-through' : 'text-black'}`}>
                                     {bill.nome}
                                   </span>
+                                  {bill.fixa && (
+                                    <span className="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded font-medium uppercase tracking-wider">
+                                      Fixa
+                                    </span>
+                                  )}
                                   {bill.parcelado && (
                                     <span className="text-[10px] bg-black/5 px-1.5 py-0.5 rounded font-mono text-black/60">
                                       {bill.parcela_atual}/{bill.parcela_total}
@@ -586,6 +594,16 @@ export default function App() {
 
                 <div className="p-4 bg-black/5 rounded-2xl space-y-4">
                   <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Conta Fixa?</span>
+                    <input 
+                      name="fixa"
+                      type="checkbox"
+                      defaultChecked={editingBill?.fixa}
+                      className="w-5 h-5 accent-emerald-600"
+                    />
+                  </div>
+
+                  <div className="border-t border-black/5 pt-4 flex items-center justify-between">
                     <span className="text-sm font-medium">Conta Parcelada?</span>
                     <input 
                       name="parcelado"

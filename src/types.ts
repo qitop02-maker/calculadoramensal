@@ -16,6 +16,7 @@ export interface Bill {
   parcela_atual?: number;
   parcela_total?: number;
   status: Status;
+  fixa: boolean;
   observacoes?: string;
 }
 
