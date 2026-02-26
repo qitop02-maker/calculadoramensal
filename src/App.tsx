@@ -203,9 +203,9 @@ export default function App() {
     };
 
     if (editingBill) {
-      // Cascading update logic: update this bill and all "future" siblings in the series
+      // 1. Update the current bill and all future siblings in the series
       const updatedBills = bills.map(b => {
-        // Match siblings: same name and group, and month >= current month of the edited bill
+        // Match siblings: same name and group (using old name/group to find them)
         const isFutureSibling = b.nome === editingBill.nome && 
                                b.grupo === editingBill.grupo && 
                                b.mes_ref >= editingBill.mes_ref;
@@ -220,23 +220,48 @@ export default function App() {
             fixa: baseBill.fixa!,
             vencimento: baseBill.vencimento,
             observacoes: baseBill.observacoes,
-            // Note: we don't update status, mes_ref, or parcela_atual to preserve individual month state
+            // Preserve status and parcela_atual
           };
         }
         return b;
       });
 
-      setBills(updatedBills);
+      // 2. If it was changed to Fixed, ensure future months have it if they don't already
+      const finalBillsToAdd: Bill[] = [];
+      if (isFixa) {
+        const startIndex = MONTHS.findIndex(m => m.value === editingBill.mes_ref);
+        const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex + 1) : [];
+        
+        monthsToApply.forEach(m => {
+          const alreadyExists = updatedBills.some(b => 
+            b.nome === baseBill.nome && 
+            b.grupo === baseBill.grupo && 
+            b.mes_ref === m.value
+          );
+          
+          if (!alreadyExists) {
+            finalBillsToAdd.push({
+              ...baseBill,
+              id: crypto.randomUUID(),
+              mes_ref: m.value,
+              status: 'pendente',
+            } as Bill);
+          }
+        });
+      }
+
+      const finalBillsState = [...updatedBills, ...finalBillsToAdd];
+      setBills(finalBillsState);
       
-      // Sync only the affected bills to Supabase
-      const affectedBills = updatedBills.filter(b => 
+      // 3. Sync to Supabase
+      const billsToUpsert = finalBillsState.filter(b => 
         b.nome === baseBill.nome && 
         b.grupo === baseBill.grupo && 
         b.mes_ref >= editingBill.mes_ref
       );
 
       try {
-        const { error } = await supabase.from('bills').upsert(affectedBills);
+        const { error } = await supabase.from('bills').upsert(billsToUpsert);
         if (error) throw error;
         setLastSync(new Date());
       } catch (err) {
@@ -248,29 +273,45 @@ export default function App() {
       const billsToAdd: Bill[] = [];
       
       if (isFixa) {
-        // Generate for all months from selected onwards
         const startIndex = MONTHS.findIndex(m => m.value === selectedMonth);
         const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex) : [{ value: selectedMonth }];
         
         monthsToApply.forEach(m => {
-          billsToAdd.push({
-            ...baseBill,
-            id: crypto.randomUUID(),
-            mes_ref: m.value,
-            parcela_atual: isParcelado ? parcelaAtual : undefined,
-            parcela_total: isParcelado ? parcelaTotal : undefined,
-          } as Bill);
+          // Avoid duplicates in the same month
+          const alreadyExists = bills.some(b => 
+            b.nome === baseBill.nome && 
+            b.grupo === baseBill.grupo && 
+            b.mes_ref === m.value
+          );
+
+          if (!alreadyExists) {
+            billsToAdd.push({
+              ...baseBill,
+              id: crypto.randomUUID(),
+              mes_ref: m.value,
+              parcela_atual: isParcelado ? parcelaAtual : undefined,
+              parcela_total: isParcelado ? parcelaTotal : undefined,
+            } as Bill);
+          }
         });
       } else if (isParcelado && parcelaTotal > 1) {
         let currentMonth = selectedMonth;
         for (let p = parcelaAtual; p <= parcelaTotal; p++) {
-          billsToAdd.push({
-            ...baseBill,
-            id: crypto.randomUUID(),
-            mes_ref: currentMonth,
-            parcela_atual: p,
-            parcela_total: parcelaTotal,
-          } as Bill);
+          const alreadyExists = bills.some(b => 
+            b.nome === baseBill.nome && 
+            b.grupo === baseBill.grupo && 
+            b.mes_ref === currentMonth
+          );
+
+          if (!alreadyExists) {
+            billsToAdd.push({
+              ...baseBill,
+              id: crypto.randomUUID(),
+              mes_ref: currentMonth,
+              parcela_atual: p,
+              parcela_total: parcelaTotal,
+            } as Bill);
+          }
           currentMonth = getNextMonth(currentMonth);
         }
       } else {
@@ -285,7 +326,6 @@ export default function App() {
 
       setBills(prev => [...prev, ...billsToAdd]);
       
-      // Bulk sync to Supabase
       try {
         const { error } = await supabase.from('bills').insert(billsToAdd);
         if (error) throw error;
