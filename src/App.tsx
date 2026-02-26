@@ -203,24 +203,66 @@ export default function App() {
     };
 
     if (editingBill) {
-      const updatedBill: Bill = {
-        ...editingBill,
-        ...baseBill,
-        mes_ref: editingBill.mes_ref, // Keep original month on edit
-        parcela_atual: isParcelado ? parcelaAtual : undefined,
-        parcela_total: isParcelado ? parcelaTotal : undefined,
-      } as Bill;
+      // Cascading update logic: update this bill and all "future" siblings in the series
+      const updatedBills = bills.map(b => {
+        // Match siblings: same name and group, and month >= current month of the edited bill
+        const isFutureSibling = b.nome === editingBill.nome && 
+                               b.grupo === editingBill.grupo && 
+                               b.mes_ref >= editingBill.mes_ref;
+        
+        if (isFutureSibling) {
+          return {
+            ...b,
+            nome: baseBill.nome!,
+            valor: baseBill.valor!,
+            categoria: baseBill.categoria!,
+            grupo: baseBill.grupo!,
+            fixa: baseBill.fixa!,
+            vencimento: baseBill.vencimento,
+            observacoes: baseBill.observacoes,
+            // Note: we don't update status, mes_ref, or parcela_atual to preserve individual month state
+          };
+        }
+        return b;
+      });
 
-      setBills(prev => prev.map(b => b.id === editingBill.id ? updatedBill : b));
-      await syncBillToSupabase(updatedBill);
+      setBills(updatedBills);
+      
+      // Sync only the affected bills to Supabase
+      const affectedBills = updatedBills.filter(b => 
+        b.nome === baseBill.nome && 
+        b.grupo === baseBill.grupo && 
+        b.mes_ref >= editingBill.mes_ref
+      );
+
+      try {
+        const { error } = await supabase.from('bills').upsert(affectedBills);
+        if (error) throw error;
+        setLastSync(new Date());
+      } catch (err) {
+        console.error('Error cascading update:', err);
+        setSyncError('Erro ao atualizar série de contas');
+      }
     } else {
       // Logic for adding new bill(s)
       const billsToAdd: Bill[] = [];
       
-      if (isParcelado && parcelaTotal > 1) {
+      if (isFixa) {
+        // Generate for all months from selected onwards
+        const startIndex = MONTHS.findIndex(m => m.value === selectedMonth);
+        const monthsToApply = startIndex !== -1 ? MONTHS.slice(startIndex) : [{ value: selectedMonth }];
+        
+        monthsToApply.forEach(m => {
+          billsToAdd.push({
+            ...baseBill,
+            id: crypto.randomUUID(),
+            mes_ref: m.value,
+            parcela_atual: isParcelado ? parcelaAtual : undefined,
+            parcela_total: isParcelado ? parcelaTotal : undefined,
+          } as Bill);
+        });
+      } else if (isParcelado && parcelaTotal > 1) {
         let currentMonth = selectedMonth;
-        const groupId = crypto.randomUUID(); // Optional: link installments together if needed in future
-
         for (let p = parcelaAtual; p <= parcelaTotal; p++) {
           billsToAdd.push({
             ...baseBill,
@@ -250,7 +292,7 @@ export default function App() {
         setLastSync(new Date());
       } catch (err) {
         console.error('Error bulk syncing bills:', err);
-        setSyncError('Erro ao salvar parcelas na nuvem');
+        setSyncError('Erro ao salvar série na nuvem');
       }
     }
 
