@@ -110,6 +110,7 @@ export default function App() {
   };
 
   const syncBillToSupabase = async (bill: Bill) => {
+    setIsSyncing(true);
     try {
       const { error } = await supabase
         .from('bills')
@@ -119,10 +120,13 @@ export default function App() {
     } catch (err) {
       console.error('Error syncing bill:', err);
       setSyncError('Erro ao salvar na nuvem');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const deleteBillFromSupabase = async (id: string) => {
+    setIsSyncing(true);
     try {
       const { error } = await supabase
         .from('bills')
@@ -133,6 +137,8 @@ export default function App() {
     } catch (err) {
       console.error('Error deleting bill:', err);
       setSyncError('Erro ao excluir na nuvem');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -219,6 +225,9 @@ export default function App() {
       observacoes: formData.get('observacoes') as string,
     };
 
+    setIsModalOpen(false);
+    setEditingBill(null);
+
     if (editingBill) {
       // 1. Update the current bill and all future siblings in the series
       const updatedBills = bills.map(b => {
@@ -275,6 +284,7 @@ export default function App() {
         b.mes_ref >= editingBill.mes_ref
       );
 
+      setIsSyncing(true);
       try {
         const { error } = await supabase.from('bills').upsert(billsToUpsert);
         if (error) throw error;
@@ -282,6 +292,8 @@ export default function App() {
       } catch (err) {
         console.error('Error cascading update:', err);
         setSyncError('Erro ao atualizar série de contas');
+      } finally {
+        setIsSyncing(false);
       }
     } else {
       // Logic for adding new bill(s)
@@ -341,6 +353,7 @@ export default function App() {
 
       setBills(prev => [...prev, ...billsToAdd]);
       
+      setIsSyncing(true);
       try {
         const { error } = await supabase.from('bills').insert(billsToAdd);
         if (error) throw error;
@@ -348,11 +361,10 @@ export default function App() {
       } catch (err) {
         console.error('Error bulk syncing bills:', err);
         setSyncError('Erro ao salvar série na nuvem');
+      } finally {
+        setIsSyncing(false);
       }
     }
-
-    setIsModalOpen(false);
-    setEditingBill(null);
   };
 
   const exportCSV = () => {
@@ -396,9 +408,11 @@ export default function App() {
       // Sync affected bills to Supabase
       const affectedBills = updatedBills.filter(b => b.grupo === newName);
       if (affectedBills.length > 0) {
+        setIsSyncing(true);
         supabase.from('bills').upsert(affectedBills).then(({ error }) => {
           if (error) console.error('Error syncing renamed group bills:', error);
           else setLastSync(new Date());
+          setIsSyncing(false);
         });
       }
     }
@@ -415,9 +429,11 @@ export default function App() {
       // Sync deletion to Supabase
       if (billsToDelete.length > 0) {
         const ids = billsToDelete.map(b => b.id);
+        setIsSyncing(true);
         supabase.from('bills').delete().in('id', ids).then(({ error }) => {
           if (error) console.error('Error deleting group bills:', error);
           else setLastSync(new Date());
+          setIsSyncing(false);
         });
       }
     }
