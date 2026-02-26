@@ -49,7 +49,12 @@ export default function App() {
 
     const savedGroups = localStorage.getItem(GROUPS_STORAGE_KEY);
     if (savedGroups) {
-      setGroups(JSON.parse(savedGroups));
+      const parsedGroups = JSON.parse(savedGroups);
+      // Ensure 'Mercado' is present if it was just added to defaults
+      if (!parsedGroups.includes('Mercado')) {
+        parsedGroups.push('Mercado');
+      }
+      setGroups(parsedGroups);
     }
 
     fetchBillsFromSupabase();
