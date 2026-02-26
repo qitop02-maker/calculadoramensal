@@ -14,20 +14,24 @@ import {
   X,
   Cloud,
   CloudOff,
-  RefreshCw
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bill, Category, Group, Status, MonthlyStats } from './types';
-import { SEED_DATA, CATEGORIES, GROUPS, MONTHS } from './constants';
+import { Bill, Group, Status, MonthlyStats } from './types';
+import { SEED_DATA, GROUPS, MONTHS } from './constants';
 import { supabase } from './lib/supabase';
 
 const LOCAL_STORAGE_KEY = 'gestor_contas_data';
+const GROUPS_STORAGE_KEY = 'gestor_contas_groups';
 
 export default function App() {
   const [bills, setBills] = useState<Bill[]>([]);
+  const [groups, setGroups] = useState<string[]>(GROUPS);
   const [selectedMonth, setSelectedMonth] = useState('2026-03');
   const [filter, setFilter] = useState<'todos' | 'pendente' | 'pago'>('todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isGroupsModalOpen, setIsGroupsModalOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [isSyncing, setIsSyncing] = useState(false);
@@ -42,6 +46,12 @@ export default function App() {
     } else {
       setBills(SEED_DATA);
     }
+
+    const savedGroups = localStorage.getItem(GROUPS_STORAGE_KEY);
+    if (savedGroups) {
+      setGroups(JSON.parse(savedGroups));
+    }
+
     fetchBillsFromSupabase();
   }, []);
 
@@ -51,6 +61,10 @@ export default function App() {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(bills));
     }
   }, [bills]);
+
+  useEffect(() => {
+    localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
+  }, [groups]);
 
   const fetchBillsFromSupabase = async () => {
     setIsSyncing(true);
@@ -193,9 +207,7 @@ export default function App() {
     const baseBill: Partial<Bill> = {
       nome: formData.get('nome') as string,
       valor: parseFloat(formData.get('valor') as string),
-      categoria: formData.get('categoria') as Category,
       grupo: formData.get('grupo') as string,
-      vencimento: formData.get('vencimento') ? parseInt(formData.get('vencimento') as string) : undefined,
       parcelado: isParcelado,
       fixa: isFixa,
       status: (formData.get('status') as Status) || 'pendente',
@@ -215,10 +227,8 @@ export default function App() {
             ...b,
             nome: baseBill.nome!,
             valor: baseBill.valor!,
-            categoria: baseBill.categoria!,
             grupo: baseBill.grupo!,
             fixa: baseBill.fixa!,
-            vencimento: baseBill.vencimento,
             observacoes: baseBill.observacoes,
             // Preserve status and parcela_atual
           };
@@ -341,12 +351,11 @@ export default function App() {
   };
 
   const exportCSV = () => {
-    const headers = ['Nome', 'Valor', 'Grupo', 'Categoria', 'Parcela', 'Fixa', 'Status'];
+    const headers = ['Nome', 'Valor', 'Grupo', 'Parcela', 'Fixa', 'Status'];
     const rows = filteredBills.map(b => [
       b.nome,
       b.valor.toFixed(2),
       b.grupo,
-      b.categoria,
       b.parcelado ? `${b.parcela_atual}/${b.parcela_total}` : '-',
       b.fixa ? 'Sim' : 'Não',
       b.status
@@ -360,6 +369,53 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleAddGroup = () => {
+    const name = prompt('Nome do novo grupo:');
+    if (name && !groups.includes(name)) {
+      setGroups([...groups, name]);
+    }
+  };
+
+  const handleRenameGroup = (oldName: string) => {
+    const newName = prompt('Novo nome para o grupo:', oldName);
+    if (newName && newName !== oldName && !groups.includes(newName)) {
+      // Update groups list
+      setGroups(groups.map(g => g === oldName ? newName : g));
+      
+      // Update all bills in this group
+      const updatedBills = bills.map(b => b.grupo === oldName ? { ...b, grupo: newName } : b);
+      setBills(updatedBills);
+      
+      // Sync affected bills to Supabase
+      const affectedBills = updatedBills.filter(b => b.grupo === newName);
+      if (affectedBills.length > 0) {
+        supabase.from('bills').upsert(affectedBills).then(({ error }) => {
+          if (error) console.error('Error syncing renamed group bills:', error);
+          else setLastSync(new Date());
+        });
+      }
+    }
+  };
+
+  const handleDeleteGroup = (groupName: string) => {
+    if (window.confirm(`Tem certeza que deseja excluir o grupo "${groupName}"? Todas as contas deste grupo serão excluídas.`)) {
+      const billsToDelete = bills.filter(b => b.grupo === groupName);
+      const remainingBills = bills.filter(b => b.grupo !== groupName);
+      
+      setBills(remainingBills);
+      setGroups(groups.filter(g => g !== groupName));
+      
+      // Sync deletion to Supabase
+      if (billsToDelete.length > 0) {
+        const ids = billsToDelete.map(b => b.id);
+        supabase.from('bills').delete().in('id', ids).then(({ error }) => {
+          if (error) console.error('Error deleting group bills:', error);
+          else setLastSync(new Date());
+        });
+      }
+    }
   };
 
   return (
@@ -384,6 +440,13 @@ export default function App() {
                 {isSyncing ? 'Sincronizando...' : lastSync ? `Sinc: ${lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Offline'}
               </span>
             </div>
+            <button 
+              onClick={() => setIsGroupsModalOpen(true)}
+              className="p-2 hover:bg-black/5 rounded-full transition-colors"
+              title="Gerenciar Grupos"
+            >
+              <Settings className="w-5 h-5 opacity-60" />
+            </button>
             <button 
               onClick={exportCSV}
               className="p-2 hover:bg-black/5 rounded-full transition-colors"
@@ -529,7 +592,6 @@ export default function App() {
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-xs text-black/40">{bill.categoria}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-4">
@@ -620,7 +682,7 @@ export default function App() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-black/40 uppercase tracking-wider">Valor (R$)</label>
                     <input 
@@ -634,44 +696,17 @@ export default function App() {
                       className="w-full bg-black/5 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-black/40 uppercase tracking-wider">Grupo</label>
-                    <select 
-                      name="grupo"
-                      defaultValue={editingBill?.grupo || 'Geral'}
-                      className="w-full bg-black/5 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    >
-                      {GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-                      {!GROUPS.includes(editingBill?.grupo || '') && editingBill?.grupo && (
-                        <option value={editingBill.grupo}>{editingBill.grupo}</option>
-                      )}
-                    </select>
-                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-black/40 uppercase tracking-wider">Categoria</label>
-                    <select 
-                      name="categoria"
-                      defaultValue={editingBill?.categoria || 'Outros'}
-                      className="w-full bg-black/5 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    >
-                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-black/40 uppercase tracking-wider">Vencimento (Dia)</label>
-                    <input 
-                      name="vencimento"
-                      type="number"
-                      min="1"
-                      max="31"
-                      defaultValue={editingBill?.vencimento}
-                      placeholder="Ex: 10"
-                      className="w-full bg-black/5 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    />
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-black/40 uppercase tracking-wider">Grupo</label>
+                  <select 
+                    name="grupo"
+                    defaultValue={editingBill?.grupo || 'Geral'}
+                    className="w-full bg-black/5 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    {groups.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
                 </div>
 
                 <div className="p-4 bg-black/5 rounded-2xl space-y-4">
@@ -736,6 +771,68 @@ export default function App() {
                   {editingBill ? 'Salvar Alterações' : 'Adicionar Conta'}
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Groups Management Modal */}
+      <AnimatePresence>
+        {isGroupsModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsGroupsModalOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              className="relative w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="px-6 py-4 border-b border-black/5 flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Gerenciar Grupos</h2>
+                <button onClick={() => setIsGroupsModalOpen(false)} className="p-2 hover:bg-black/5 rounded-full">
+                  <X className="w-5 h-5 opacity-40" />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                <button 
+                  onClick={handleAddGroup}
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 font-semibold py-3 rounded-xl hover:bg-emerald-100 transition-all border border-emerald-100"
+                >
+                  <Plus className="w-5 h-5" />
+                  Novo Grupo
+                </button>
+
+                <div className="space-y-2">
+                  {groups.map(group => (
+                    <div key={group} className="flex items-center justify-between p-3 bg-black/5 rounded-xl group/item">
+                      <span className="font-medium">{group}</span>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => handleRenameGroup(group)}
+                          className="p-2 hover:bg-black/5 rounded-full text-black/40 hover:text-black transition-colors"
+                          title="Renomear"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteGroup(group)}
+                          className="p-2 hover:bg-red-50 rounded-full text-black/40 hover:text-red-500 transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
