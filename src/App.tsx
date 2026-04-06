@@ -18,6 +18,8 @@ import {
   Settings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Bill, Group, Status, MonthlyStats } from './types';
 import { SEED_DATA, GROUPS, MONTHS } from './constants';
 import { supabase } from './lib/supabase';
@@ -471,25 +473,43 @@ export default function App() {
     }
   };
 
-  const exportCSV = () => {
-    const headers = ['Nome', 'Valor', 'Grupo', 'Parcela', 'Fixa', 'Status'];
-    const rows = filteredBills.map(b => [
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    const monthLabel = MONTHS.find(m => m.value === selectedMonth)?.label || selectedMonth;
+    
+    // Header
+    doc.setFontSize(18);
+    doc.setTextColor(5, 150, 105); // emerald-600
+    doc.text(`Gestor de Contas - ${monthLabel}`, 14, 20);
+    
+    // Stats Summary
+    doc.setFontSize(11);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Total: ${formatCurrency(stats.total)}`, 14, 30);
+    doc.text(`Pago: ${formatCurrency(stats.pago)}`, 14, 37);
+    doc.text(`Pendente: ${formatCurrency(stats.pendente)}`, 14, 44);
+    
+    const tableHeaders = [['Nome', 'Valor', 'Grupo', 'Parcela', 'Fixa', 'Status']];
+    const tableRows = filteredBills.map(b => [
       b.nome,
-      b.valor.toFixed(2),
+      formatCurrency(b.valor),
       b.grupo,
       b.parcelado ? `${b.parcela_atual}/${b.parcela_total}` : '-',
       b.fixa ? 'Sim' : 'Não',
-      b.status
+      b.status === 'pago' ? 'Pago' : 'Pendente'
     ]);
-    
-    const csvContent = [headers, ...rows].map(e => e.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `contas_${selectedMonth}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    autoTable(doc, {
+      head: tableHeaders,
+      body: tableRows,
+      startY: 55,
+      theme: 'striped',
+      headStyles: { fillColor: [5, 150, 105] }, // emerald-600
+      styles: { fontSize: 9 },
+      margin: { top: 55 },
+    });
+
+    doc.save(`contas_${selectedMonth}.pdf`);
   };
 
   const handleAddGroup = () => {
@@ -581,9 +601,9 @@ export default function App() {
               <Settings className="w-5 h-5 opacity-60" />
             </button>
             <button 
-              onClick={exportCSV}
+              onClick={exportPDF}
               className="p-2 hover:bg-black/5 rounded-full transition-colors"
-              title="Exportar CSV"
+              title="Exportar PDF"
             >
               <Download className="w-5 h-5 opacity-60" />
             </button>
