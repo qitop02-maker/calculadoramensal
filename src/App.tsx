@@ -93,6 +93,8 @@ export default function App() {
 
   // Cleanup: Fix invalid IDs from previous versions to ensure Supabase compatibility
   useEffect(() => {
+    if (bills.length === 0) return;
+    
     // General UUID regex (v1-v5)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const hasInvalidIds = bills.some(b => !uuidRegex.test(b.id));
@@ -112,7 +114,7 @@ export default function App() {
       });
       setBills(fixedBills);
     }
-  }, [bills]);
+  }, [bills.length]); // Only run when the number of bills changes
 
   useEffect(() => {
     localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
@@ -886,6 +888,7 @@ export default function App() {
                       step="0.01"
                       required
                       min="0.01"
+                      inputMode="decimal"
                       defaultValue={editingBill?.valor}
                       placeholder="0,00"
                       className="w-full bg-black/5 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
