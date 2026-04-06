@@ -16,6 +16,7 @@ export interface Bill {
   observacoes?: string;
   categoria?: string;
   vencimento?: number;
+  created_at?: string;
 }
 
 export interface MonthlyStats {

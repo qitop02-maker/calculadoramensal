@@ -25,10 +25,15 @@ import { supabase } from './lib/supabase';
 const LOCAL_STORAGE_KEY = 'gestor_contas_data';
 const GROUPS_STORAGE_KEY = 'gestor_contas_groups';
 
+const getCurrentMonth = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
 export default function App() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [groups, setGroups] = useState<string[]>(GROUPS);
-  const [selectedMonth, setSelectedMonth] = useState('2026-03');
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [filter, setFilter] = useState<'todos' | 'pendente' | 'pago'>('todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGroupsModalOpen, setIsGroupsModalOpen] = useState(false);
@@ -37,6 +42,15 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  const prepareBillForSupabase = (bill: any) => {
+    return {
+      ...bill,
+      categoria: bill.categoria || 'Geral',
+      vencimento: bill.vencimento || 1,
+      created_at: bill.created_at || new Date().toISOString()
+    };
+  };
 
   // Load initial data from LocalStorage then sync with Supabase
   useEffect(() => {
@@ -59,6 +73,14 @@ export default function App() {
 
     fetchBillsFromSupabase();
   }, []);
+
+  // Scroll to active month on mount and when selectedMonth changes
+  useEffect(() => {
+    const element = document.getElementById(`month-${selectedMonth}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [selectedMonth]);
 
   // Save to LocalStorage whenever bills change
   useEffect(() => {
@@ -113,11 +135,7 @@ export default function App() {
         if (savedData) {
           const localBills = JSON.parse(savedData);
           if (localBills.length > 0) {
-            const billsToMigrate = localBills.map((b: any) => ({
-              ...b,
-              categoria: b.categoria || 'Geral',
-              vencimento: b.vencimento || 1
-            }));
+            const billsToMigrate = localBills.map((b: any) => prepareBillForSupabase(b));
             const { error: insertError } = await supabase.from('bills').insert(billsToMigrate);
             if (insertError) {
               console.error('Error migrating local data to Supabase:', insertError);
@@ -144,11 +162,7 @@ export default function App() {
     setSyncError(null);
     try {
       // Add default values for required DB columns
-      const billsToSync = bills.map(b => ({
-        ...b,
-        categoria: b.categoria || 'Geral',
-        vencimento: b.vencimento || 1
-      }));
+      const billsToSync = bills.map(b => prepareBillForSupabase(b));
       const { error } = await supabase.from('bills').upsert(billsToSync);
       if (error) throw error;
       setLastSync(new Date());
@@ -164,11 +178,7 @@ export default function App() {
 
   const seedSupabase = async () => {
     try {
-      const billsToSeed = SEED_DATA.map(b => ({
-        ...b,
-        categoria: 'Geral',
-        vencimento: 1
-      }));
+      const billsToSeed = SEED_DATA.map(b => prepareBillForSupabase(b));
       const { error } = await supabase
         .from('bills')
         .insert(billsToSeed);
@@ -184,11 +194,7 @@ export default function App() {
     setIsSyncing(true);
     try {
       // Add default values for required DB columns that were removed from UI
-      const billToSync = {
-        ...bill,
-        categoria: bill.categoria || 'Geral',
-        vencimento: bill.vencimento || 1
-      };
+      const billToSync = prepareBillForSupabase(bill);
       const { error } = await supabase
         .from('bills')
         .upsert(billToSync);
@@ -389,11 +395,7 @@ export default function App() {
             b.grupo === baseBill.grupo && 
             b.mes_ref >= currentEditingBill.mes_ref
           )
-          .map(b => ({
-            ...b,
-            categoria: b.categoria || 'Geral',
-            vencimento: b.vencimento || 1
-          }));
+          .map(b => prepareBillForSupabase(b));
 
         const { error } = await supabase.from('bills').upsert(billsToUpsert);
         if (error) throw error;
@@ -455,11 +457,7 @@ export default function App() {
 
         if (billsToAdd.length > 0) {
           setBills(prev => [...prev, ...billsToAdd]);
-          const billsToInsert = billsToAdd.map(b => ({
-            ...b,
-            categoria: b.categoria || 'Geral',
-            vencimento: b.vencimento || 1
-          }));
+          const billsToInsert = billsToAdd.map(b => prepareBillForSupabase(b));
           const { error } = await supabase.from('bills').insert(billsToInsert);
           if (error) throw error;
           setLastSync(new Date());
@@ -515,11 +513,7 @@ export default function App() {
       const affectedBills = updatedBills.filter(b => b.grupo === newName);
       if (affectedBills.length > 0) {
         setIsSyncing(true);
-        const billsToSync = affectedBills.map(b => ({
-          ...b,
-          categoria: b.categoria || 'Geral',
-          vencimento: b.vencimento || 1
-        }));
+        const billsToSync = affectedBills.map(b => prepareBillForSupabase(b));
         supabase.from('bills').upsert(billsToSync).then(({ error }) => {
           if (error) console.error('Error syncing renamed group bills:', error);
           else setLastSync(new Date());
@@ -597,22 +591,54 @@ export default function App() {
         </div>
         
         {/* Horizontal Month Navigation */}
-        <div className="max-w-2xl mx-auto mt-4">
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
-            {MONTHS.map(m => (
-              <button
-                key={m.value}
-                onClick={() => setSelectedMonth(m.value)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-                  selectedMonth === m.value 
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' 
-                    : 'bg-black/5 text-black/60 hover:bg-black/10'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
+        <div className="max-w-2xl mx-auto mt-4 relative group">
+          <div className="flex items-center gap-2 overflow-x-auto pb-4 no-scrollbar scroll-smooth px-1">
+            {MONTHS.map(m => {
+              const isActive = selectedMonth === m.value;
+              const isCurrentMonth = getCurrentMonth() === m.value;
+              
+              return (
+                <button
+                  key={m.value}
+                  id={`month-${m.value}`}
+                  onClick={() => setSelectedMonth(m.value)}
+                  className={`relative px-5 py-2.5 rounded-2xl text-sm font-semibold transition-all whitespace-nowrap flex flex-col items-center gap-0.5 ${
+                    isActive 
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105 z-10' 
+                      : 'bg-white text-black/50 hover:bg-black/5 border border-black/[0.03]'
+                  }`}
+                >
+                  {m.label}
+                  {isCurrentMonth && !isActive && (
+                    <span className="w-1 h-1 bg-emerald-500 rounded-full" />
+                  )}
+                  {isActive && (
+                    <motion.div 
+                      layoutId="activeMonth"
+                      className="absolute inset-0 bg-emerald-600 rounded-2xl -z-10"
+                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
+          
+          {/* Go to Today Button - Only shows when not on current month */}
+          {selectedMonth !== getCurrentMonth() && (
+            <motion.button
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              onClick={() => setSelectedMonth(getCurrentMonth())}
+              className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-3 py-1 rounded-full border border-emerald-200 shadow-sm hover:bg-emerald-200 transition-colors z-20"
+            >
+              IR PARA HOJE
+            </motion.button>
+          )}
+
+          {/* Subtle gradient indicators for scroll */}
+          <div className="absolute left-0 top-0 bottom-4 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none z-10 opacity-50" />
+          <div className="absolute right-0 top-0 bottom-4 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none z-10 opacity-50" />
         </div>
       </header>
 
