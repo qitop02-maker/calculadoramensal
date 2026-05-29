@@ -86,8 +86,9 @@ export default function App() {
 
   // Save to LocalStorage whenever bills change
   useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(bills));
     if (bills.length > 0) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(bills));
+      localStorage.setItem('has_seeded', 'true');
     }
   }, [bills]);
 
@@ -136,20 +137,22 @@ export default function App() {
       } else {
         // Supabase is empty. Try to push local data if it exists.
         const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (savedData) {
+        const hasSeeded = localStorage.getItem('has_seeded');
+        
+        if (savedData && JSON.parse(savedData).length > 0) {
           const localBills = JSON.parse(savedData);
-          if (localBills.length > 0) {
-            const billsToMigrate = localBills.map((b: any) => prepareBillForSupabase(b));
-            const { error: insertError } = await supabase.from('bills').insert(billsToMigrate);
-            if (insertError) {
-              console.error('Error migrating local data to Supabase:', insertError);
-              // If migration fails, just keep local data for now
-            } else {
-              setLastSync(new Date());
-            }
+          const billsToMigrate = localBills.map((b: any) => prepareBillForSupabase(b));
+          const { error: insertError } = await supabase.from('bills').insert(billsToMigrate);
+          if (insertError) {
+            console.error('Error migrating local data to Supabase:', insertError);
+          } else {
+            setLastSync(new Date());
           }
-        } else {
+        } else if (!hasSeeded) {
           await seedSupabase();
+        } else {
+          setBills([]);
+          setLastSync(new Date());
         }
       }
     } catch (err: any) {
@@ -350,9 +353,18 @@ export default function App() {
       if (currentEditingBill) {
         // 1. Update the current bill and all future siblings in the series
         const updatedBills = bills.map(b => {
+          if (b.id === currentEditingBill.id) {
+            return {
+              ...b,
+              ...baseBill,
+              parcela_atual: isParcelado ? parcelaAtual : undefined,
+              parcela_total: isParcelado ? parcelaTotal : undefined,
+            };
+          }
+
           const isFutureSibling = b.nome === currentEditingBill.nome && 
                                  b.grupo === currentEditingBill.grupo && 
-                                 b.mes_ref >= currentEditingBill.mes_ref;
+                                 b.mes_ref > currentEditingBill.mes_ref;
           
           if (isFutureSibling) {
             return {

@@ -205,17 +205,21 @@ export const GROUPS: string[] = [
   'Geral', 'Wil', 'Nu B', 'M.P', 'Sicred', 'Mercado'
 ];
 
-export const MONTHS = [
-  { value: `${currentYear}-01`, label: 'Janeiro' },
-  { value: `${currentYear}-02`, label: 'Fevereiro' },
-  { value: `${currentYear}-03`, label: 'Março' },
-  { value: `${currentYear}-04`, label: 'Abril' },
-  { value: `${currentYear}-05`, label: 'Maio' },
-  { value: `${currentYear}-06`, label: 'Junho' },
-  { value: `${currentYear}-07`, label: 'Julho' },
-  { value: `${currentYear}-08`, label: 'Agosto' },
-  { value: `${currentYear}-09`, label: 'Setembro' },
-  { value: `${currentYear}-10`, label: 'Outubro' },
-  { value: `${currentYear}-11`, label: 'Novembro' },
-  { value: `${currentYear}-12`, label: 'Dezembro' },
-];
+export const generateMonths = () => {
+  const months = [];
+  const startYear = currentYear - 1;
+  const endYear = currentYear + 2;
+  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  
+  for (let y = startYear; y <= endYear; y++) {
+    for (let m = 1; m <= 12; m++) {
+      months.push({
+        value: `${y}-${String(m).padStart(2, '0')}`,
+        label: `${monthNames[m-1]}${y !== currentYear ? ' ' + y : ''}`
+      });
+    }
+  }
+  return months;
+};
+
+export const MONTHS = generateMonths();
